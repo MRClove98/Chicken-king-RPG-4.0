@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Chicken King 5.0 Ultimate</title>
+<style>
+body{margin:0;overflow:hidden;font-family:Arial}
+canvas{display:block;background:#7fcf6a}
+#ui{position:absolute;left:10px;top:10px;background:rgba(255,255,255,.9);padding:10px;border-radius:8px}
+#panel{position:absolute;right:10px;top:10px;width:260px;background:white;padding:10px;border-radius:8px;display:none}
+button{margin:4px}
+</style>
+</head>
+<body>
+<div id="ui">
+🐔 Chicken King 5.0 Ultimate<br>
+WASD Move | SPACE Attack | E Interact | I Inventory | K Save | L Load
+<div id="stats"></div>
+</div>
+<div id="panel"></div>
+<canvas id="game"></canvas>
+
+<script>
+const c=document.getElementById("game"),ctx=c.getContext("2d");
+function resize(){c.width=innerWidth;c.height=innerHeight} resize(); onresize=resize;
+
+const p={x:0,y:0,hp:100,maxHp:100,coins:50,xp:0,lvl:1,atk:6,potions:2};
+const pet={x:-60,y:-60};
+const shop={x:250,y:250};
+const witch={x:-300,y:150};
+const boss={x:1500,y:1200,hp:500,max:500,alive:true};
+let questKills=0,rewardClaimed=false;
+
+const panel=document.getElementById("panel");
+const keys={}, enemies=[];
+
+function spawnEnemy(){
+ enemies.push({
+  x:(Math.random()-.5)*3000,
+  y:(Math.random()-.5)*3000,
+  hp:30,max:30,
+  emoji:["🦊","🐺","🦅"][Math.floor(Math.random()*3)]
+ });
+}
+for(let i=0;i<35;i++) spawnEnemy();
+
+function openPanel(html){panel.style.display="block";panel.innerHTML=html;}
+function closePanel(){panel.style.display="none";}
+
+addEventListener("keydown",e=>{
+ const k=e.key.toLowerCase();
+ keys[k]=true;
+
+ if(k==="i"){
+  openPanel(`<h3>🎒 Inventory</h3>
+  Potions: ${p.potions}<br>Attack: ${p.atk}<br>Coins: ${p.coins}
+  <br><button onclick="closePanel()">Close</button>`);
+ }
+
+ if(k==="e"){
+  if(Math.hypot(p.x-shop.x,p.y-shop.y)<140){
+   openPanel(`<h3>🏪 Shop</h3>
+   Coins: ${p.coins}<br>
+   <button onclick="buySword()">Sword +3 (30)</button>
+   <button onclick="buyPotion()">Potion (10)</button>
+   <button onclick="buyArmor()">Armor +20 HP (40)</button>
+   <button onclick="closePanel()">Close</button>`);
+  }
+  if(Math.hypot(p.x-witch.x,p.y-witch.y)<140){
+   openPanel(`<h3>🧙 Witch Quest</h3>
+   Defeat 10 enemies.<br>
+   Progress: ${questKills}/10<br>
+   Reward: 100 Coins
+   <br><button onclick="closePanel()">Close</button>`);
+  }
+ }
+
+ if(k==="k"){
+   localStorage.setItem("cksave",JSON.stringify({p,questKills,boss}));
+   alert("Game Saved!");
+ }
+ if(k==="l"){
+   let s=localStorage.getItem("cksave");
+   if(s){
+     let d=JSON.parse(s);
+     Object.assign(p,d.p);
+     questKills=d.questKills;
+     Object.assign(boss,d.boss);
+   }
+ }
+});
+addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
+
+function buySword(){if(p.coins>=30){p.coins-=30;p.atk+=3;}}
+function buyPotion(){if(p.coins>=10){p.coins-=10;p.potions++;}}
+function buyArmor(){if(p.coins>=40){p.coins-=40;p.maxHp+=20;p.hp=p.maxHp;}}
+
+function update(){
+ if(keys.w)p.y-=4;
+ if(keys.s)p.y+=4;
+ if(keys.a)p.x-=4;
+ if(keys.d)p.x+=4;
+
+ pet.x+=(p.x-50-pet.x)*0.08;
+ pet.y+=(p.y-50-pet.y)*0.08;
+
+ if(keys.h && p.potions>0){
+   p.potions--; p.hp=Math.min(p.maxHp,p.hp+40);
+   keys.h=false;
+ }
+
+ enemies.forEach(e=>{
+  let dx=p.x-e.x,dy=p.y-e.y,d=Math.hypot(dx,dy);
+  if(d<350){e.x+=dx/d;e.y+=dy/d;}
+  if(d<30)p.hp-=0.04;
+  if(keys[" "] && d<90)e.hp-=p.atk*0.2;
+ });
+
+ for(let i=enemies.length-1;i>=0;i--){
+   if(enemies[i].hp<=0){
+      enemies.splice(i,1);
+      spawnEnemy();
+      p.coins+=10;
+      p.xp+=15;
+      questKills++;
+   }
+ }
+
+ if(questKills>=10 && !rewardClaimed){
+   rewardClaimed=true;
+   p.coins+=100;
+ }
+
+ if(boss.alive){
+   let d=Math.hypot(p.x-boss.x,p.y-boss.y);
+   if(d<500){boss.x+=(p.x-boss.x)/d*0.7;boss.y+=(p.y-boss.y)/d*0.7;}
+   if(d<40)p.hp-=0.12;
+   if(keys[" "] && d<120)boss.hp-=p.atk*0.15;
+   if(boss.hp<=0){boss.alive=false;p.coins+=500;p.xp+=500;}
+ }
+
+ while(p.xp>=p.lvl*100){
+   p.xp-=p.lvl*100;
+   p.lvl++;
+   p.atk+=2;
+   p.maxHp+=10;
+   p.hp=p.maxHp;
+ }
+
+ stats.textContent=`❤️${Math.floor(p.hp)} ⭐Lv${p.lvl} 🪙${p.coins} ⚔️${p.atk} 🧪${p.potions}`;
+}
+
+function draw(){
+ ctx.clearRect(0,0,c.width,c.height);
+ let camX=p.x-c.width/2, camY=p.y-c.height/2;
+
+ ctx.fillStyle="brown";
+ ctx.fillRect(shop.x-camX,shop.y-camY,140,140);
+ ctx.fillStyle="white";
+ ctx.font="24px Arial";
+ ctx.textAlign="center";
+ ctx.fillText("SHOP",shop.x-camX+70,shop.y-camY+75);
+
+ ctx.font="40px Arial";
+ ctx.fillText("🧙",witch.x-camX,witch.y-camY);
+
+ enemies.forEach(e=>{
+  let sx=e.x-camX, sy=e.y-camY;
+  ctx.font="32px Arial";
+  ctx.fillText(e.emoji,sx,sy);
+ });
+
+ if(boss.alive){
+  ctx.font="60px Arial";
+  ctx.fillText("👑",boss.x-camX,boss.y-camY);
+ }
+
+ ctx.font="28px Arial";
+ ctx.fillText("🐣",pet.x-camX,pet.y-camY);
+
+ ctx.font="50px Arial";
+ ctx.fillText("🐔",c.width/2,c.height/2+Math.sin(Date.now()/120)*4);
+}
+
+(function loop(){update();draw();requestAnimationFrame(loop)})();
+</script>
+</body>
+</html>
